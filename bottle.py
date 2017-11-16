@@ -114,17 +114,6 @@ class BottleException(Exception):
     """ A base class for exceptions used by bottle. """
     pass
 
-<<<<<<< Updated upstream
-
-class HTTPError(BottleException):
-    """
-    A way to break the execution and instantly jump to an error handler.
-    """
-    def __init__(self, status, text):
-        self.output = text
-        self.http_status = int(status)
-        BottleException.__init__(self, status, text)
-=======
 
 class HTTPError(BottleException):
     """
@@ -558,11 +547,6 @@ def parse_date(ims):
     except (ValueError, IndexError):
         return None
 
-
-
-
->>>>>>> Stashed changes
-
     def __repr__(self):
         return 'HTTPError(%d,%s)' % (self.http_status, repr(self.output))
 
@@ -574,40 +558,6 @@ def parse_date(ims):
             'error_message' : ''.join(self.output)
         }
 
-<<<<<<< Updated upstream
-
-class BreakTheBottle(BottleException):
-    """
-    Not an exception, but a straight jump out of the controller code.
-    Causes the Bottle to instantly call start_response() and return the
-    content of output
-    """
-    def __init__(self, output):
-        self.output = output
-
-
-
-
-
-
-# WSGI abstraction: Request and response management
-
-_default_app = None
-def default_app(newapp = None):
-    """
-    Returns the current default app or sets a new one.
-    Defaults to an instance of Bottle
-    """
-    global _default_app
-    if newapp:
-        _default_app = newapp
-    if not _default_app:
-        _default_app = Bottle()
-    return _default_app
-
-
-class Bottle(object):
-=======
 # Decorators
 
 def validate(**vkargs):
@@ -646,7 +596,6 @@ def error(code=500):
     Decorator for error handler. Same as set_error_handler(code, handler).
     """
     return default_app().error(code)
->>>>>>> Stashed changes
 
     def __init__(self, catchall=True, optimize=False, autojson=True):
         self.simple_routes = {}
@@ -658,187 +607,6 @@ def error(code=500):
         self.catchall = catchall
         self.serve = True
 
-<<<<<<< Updated upstream
-    def match_url(self, url, method='GET'):
-        """
-        Returns the first matching handler and a parameter dict or (None, None)
-        """
-        url = url.strip().lstrip("/ ")
-        # Search for static routes first
-        route = self.simple_routes.get(method,{}).get(url,None)
-        if route:
-            return (route, {})
-        
-        routes = self.regexp_routes.get(method,[])
-        for i in range(len(routes)):
-            match = routes[i][0].match(url)
-            if match:
-                handler = routes[i][1]
-                if i > 0 and self.optimize and random.random() <= 0.001:
-                    routes[i-1], routes[i] = routes[i], routes[i-1]
-                return (handler, match.groupdict())
-        if self.default_route:
-            return (self.default_route, {})
-        if method == 'HEAD': # Fall back to GET
-            return self.match_url(url)
-        else:
-            return (None, None)
-
-    def add_controller(self, route, controller, **kargs):
-        """ Adds a controller class or object """
-        if '{action}' not in route and 'action' not in kargs:
-            raise BottleException("Routes to controller classes or object MUST"
-                " contain an {action} placeholder or use the action-parameter")
-        for action in (m for m in dir(controller) if not m.startswith('_')):
-            handler = getattr(controller, action)
-            if callable(handler) and action == kargs.get('action', action):
-                self.add_route(route.replace('{action}', action), handler, **kargs)
-
-    def add_route(self, route, handler, method='GET', simple=False, **kargs):
-        """ Adds a new route to the route mappings. """
-        if isinstance(handler, type) and issubclass(handler, BaseController):
-            handler = handler()
-        if isinstance(handler, BaseController):
-            self.add_controller(route, handler, method=method, simple=simple, **kargs)
-            return
-        method = method.strip().upper()
-        route = route.strip().lstrip('$^/ ').rstrip('$^ ')
-        if re.match(r'^(\w+/)*\w*$', route) or simple:
-            self.simple_routes.setdefault(method, {})[route] = handler
-        else:
-            route = re.sub(r':([a-zA-Z_]+)(?P<uniq>[^\w/])(?P<re>.+?)(?P=uniq)',
-                           r'(?P<\1>\g<re>)',route)
-            route = re.sub(r':([a-zA-Z_]+)', r'(?P<\1>[^/]+)', route)
-            route = re.compile('^%s$' % route)
-            self.regexp_routes.setdefault(method, []).append([route, handler])
-
-    def route(self, url, **kargs):
-        """
-        Decorator for request handler.
-        Same as add_route(url, handler, **kargs).
-        """
-        def wrapper(handler):
-            self.add_route(url, handler, **kargs)
-            return handler
-        return wrapper
-
-    def set_default(self, handler):
-        self.default_route = handler
-
-    def default(self):
-        """ Decorator for request handler. Same as add_defroute( handler )."""
-        def wrapper(handler):
-            self.set_default(handler)
-            return handler
-        return wrapper
-
-    def set_error_handler(self, code, handler):
-        """ Adds a new error handler. """
-        self.error_handler[int(code)] = handler
-
-    def error(self, code=500):
-        """
-        Decorator for error handler.
-        Same as set_error_handler(code, handler).
-        """
-        def wrapper(handler):
-            self.set_error_handler(code, handler)
-            return handler
-        return wrapper
-
-    def cast(self, out):
-        """
-        Cast the output to an iterable of strings or something WSGI can handle.
-        Set Content-Type and Content-Length when possible. Then clear output
-        on HEAD requests.
-        Supports: False, str, unicode, list(unicode), dict(), open()
-        """
-        if self.autojson and json_dumps and isinstance(out, dict):
-            out = [json_dumps(out)]
-            response.content_type = 'application/json'
-        elif not out:
-            out = []
-            response.header['Content-Length'] = '0'
-        elif isinstance(out, types.StringType):
-            out = [out]
-        elif isinstance(out, unicode):
-            out = [out.encode(response.charset)]
-        elif isinstance(out, list) and isinstance(out[0], unicode):
-            out = map(lambda x: x.encode(response.charset), out)
-        elif hasattr(out, 'read'):
-            out = request.environ.get('wsgi.file_wrapper',
-                  lambda x: iter(lambda: x.read(8192), ''))(out)
-        if isinstance(out, list) and len(out) == 1:
-            response.header['Content-Length'] = str(len(out[0]))
-        if not hasattr(out, '__iter__'):
-            raise TypeError('Request handler for route "%s" returned [%s] '
-            'which is not iterable.' % (request.path, type(out).__name__))
-        return out
-
-
-    def __call__(self, environ, start_response):
-        """ The bottle WSGI-interface. """
-        request.bind(environ)
-        response.bind()
-        try: # Unhandled Exceptions
-            try: # Bottle Error Handling
-                if not self.serve:
-                    abort(503, "Server stopped")
-                handler, args = self.match_url(request.path, request.method)
-                if not handler:
-                    raise HTTPError(404, "Not found")
-                output = handler(**args)
-                db.close()
-            except BreakTheBottle, e:
-                output = e.output
-            except HTTPError, e:
-                response.status = e.http_status
-                output = self.error_handler.get(response.status, str)(e)
-            output = self.cast(output)
-            if response.status in (100, 101, 204, 304) or request.method == 'HEAD':
-                output = [] # rfc2616 section 4.3
-        except (KeyboardInterrupt, SystemExit, MemoryError):
-            raise
-        except Exception, e:
-            response.status = 500
-            if self.catchall:
-                err = "Unhandled Exception: %s\n" % (repr(e))
-                if DEBUG:
-                    err += TRACEBACK_TEMPLATE % traceback.format_exc(10)
-                output = [str(HTTPError(500, err))]
-                request._environ['wsgi.errors'].write(err)
-            else:
-                raise
-        status = '%d %s' % (response.status, HTTP_CODES[response.status])
-        start_response(status, response.wsgiheaders())
-        return output
-
-
-
-class Request(threading.local):
-    """ Represents a single request using thread-local namespace. """
-
-    def bind(self, environ):
-        """
-        Binds the enviroment of the current request to this request handler
-        """
-        self._environ = environ
-        self.environ = self._environ
-        self._GET = None
-        self._POST = None
-        self._GETPOST = None
-        self._COOKIES = None
-        self.path = self._environ.get('PATH_INFO', '/').strip()
-        if not self.path.startswith('/'):
-            self.path = '/' + self.path
-
-    @property
-    def method(self):
-        """ Get the request method (GET,POST,PUT,DELETE,...) """
-        return self._environ.get('REQUEST_METHOD', 'GET').upper()
-=======
-
-
 
 
 # Server adapter
@@ -866,111 +634,18 @@ class ServerAdapter(WSGIAdapter):
 
     def __repr__(self):
         return "%s (%s:%d)" % (self.__class__.__name__, self.host, self.port)
->>>>>>> Stashed changes
 
     @property
     def query_string(self):
         """ Get content of QUERY_STRING """
         return self._environ.get('QUERY_STRING', '')
 
-<<<<<<< Updated upstream
-    @property
-    def input_length(self):
-        """ Get content of CONTENT_LENGTH """
-        try:
-            return max(0,int(self._environ.get('CONTENT_LENGTH', '0')))
-        except ValueError:
-            return 0
 
-    @property
-    def GET(self):
-        """ Get a dict with GET parameters. """
-        if self._GET is None:
-            data = parse_qs(self.query_string, keep_blank_values=True)
-            self._GET = {}
-            for key, value in data.iteritems():
-                if len(value) == 1:
-                    self._GET[key] = value[0]
-                else:
-                    self._GET[key] = value
-        return self._GET
-
-    @property
-    def POST(self):
-        """ Get a dict with parsed POST or PUT data. """
-        if self._POST is None:
-            data = cgi.FieldStorage(fp=self._environ['wsgi.input'],
-                environ=self._environ, keep_blank_values=True)
-            self._POST  = {}
-            for item in data.list or []:
-                name = item.name
-                if not item.filename:
-                    item = item.value
-                self._POST.setdefault(name, []).append(item)
-            for key in self._POST:
-                if len(self._POST[key]) == 1:
-                    self._POST[key] = self._POST[key][0]
-        return self._POST
-
-    @property
-    def params(self):
-        """ Returns a mix of GET and POST data. POST overwrites GET """
-        if self._GETPOST is None:
-            self._GETPOST = dict(self.GET)
-            self._GETPOST.update(dict(self.POST))
-        return self._GETPOST
-
-    @property
-    def COOKIES(self):
-        """ Returns a dict with COOKIES. """
-        if self._COOKIES is None:
-            raw_dict = SimpleCookie(self._environ.get('HTTP_COOKIE',''))
-            self._COOKIES = {}
-            for cookie in raw_dict.itervalues():
-                self._COOKIES[cookie.key] = cookie.value
-        return self._COOKIES
-
-
-class Response(threading.local):
-    """ Represents a single response using thread-local namespace. """
-
-    def bind(self):
-        """ Clears old data and creates a brand new Response object """
-        self._COOKIES = None
-        self.status = 200
-        self.header_list = []
-        self.header = HeaderWrapper(self.header_list)
-        self.content_type = 'text/html'
-        self.error = None
-        self.charset = 'utf8'
-
-    def wsgiheaders(self):
-        ''' Returns a wsgi conform list of header/value pairs '''
-        for c in self.COOKIES.itervalues():
-            self.header.add_header('Set-Cookie', c.OutputString())
-        return [(h.title(), str(v)) for h, v in self.header.items()]
-
-    @property
-    def COOKIES(self):
-        if not self._COOKIES:
-            self._COOKIES = SimpleCookie()
-        return self._COOKIES
-
-    def set_cookie(self, key, value, **kargs):
-        """
-        Sets a Cookie. Optional settings:
-        expires, path, comment, domain, max-age, secure, version, httponly
-        """
-        self.COOKIES[key] = value
-        for k, v in kargs.iteritems():
-            self.COOKIES[key][k] = v
-=======
 class WSGIRefServer(ServerAdapter):
     def run(self, handler):
         from wsgiref.simple_server import make_server
         srv = make_server(self.host, self.port, handler)
         srv.serve_forever()
->>>>>>> Stashed changes
 
     def get_content_type(self):
         """ Get the current 'Content-Type' header. """
@@ -981,220 +656,31 @@ class WSGIRefServer(ServerAdapter):
             self.charset = value.split('charset=')[-1].split(';')[0].strip()
         self.header['Content-Type'] = value
 
-<<<<<<< Updated upstream
-    content_type = property(get_content_type, set_content_type, None,
-                            get_content_type.__doc__)
 
-
-class BaseController(object):
-    _singleton = None
-    def __new__(cls, *a, **k):
-        if not cls._singleton:
-            cls._singleton = object.__new__(cls, *a, **k)
-        return cls._singleton
-
-=======
 class CherryPyServer(ServerAdapter):
     def run(self, handler):
         from cherrypy import wsgiserver
         server = wsgiserver.CherryPyWSGIServer((self.host, self.port), handler)
         server.start()
->>>>>>> Stashed changes
 
-def abort(code=500, text='Unknown Error: Appliction stopped.'):
-    """ Aborts execution and causes a HTTP error. """
-    raise HTTPError(code, text)
 
-<<<<<<< Updated upstream
-=======
 class FlupServer(ServerAdapter):
     def run(self, handler):
        from flup.server.fcgi import WSGIServer
        WSGIServer(handler, bindAddress=(self.host, self.port)).run()
->>>>>>> Stashed changes
 
-def redirect(url, code=307):
-    """ Aborts execution and causes a 307 redirect """
-    response.status = code
-    response.header['Location'] = url
-    raise BreakTheBottle("")
 
-<<<<<<< Updated upstream
-
-def send_file(filename, root, guessmime = True, mimetype = None):
-    """ Aborts execution and sends a static files as response. """
-    root = os.path.abspath(root) + os.sep
-    filename = os.path.abspath(os.path.join(root, filename.strip('/\\')))
-
-    if not filename.startswith(root):
-        abort(401, "Access denied.")
-    if not os.path.exists(filename) or not os.path.isfile(filename):
-        abort(404, "File does not exist.")
-    if not os.access(filename, os.R_OK):
-        abort(401, "You do not have permission to access this file.")
-=======
 class PasteServer(ServerAdapter):
     def run(self, handler):
         from paste import httpserver
         from paste.translogger import TransLogger
         app = TransLogger(handler)
         httpserver.serve(app, host=self.host, port=str(self.port))
->>>>>>> Stashed changes
 
     if guessmime and not mimetype:
         mimetype = mimetypes.guess_type(filename)[0]
     if not mimetype: mimetype = 'text/plain'
     response.content_type = mimetype
-
-<<<<<<< Updated upstream
-    stats = os.stat(filename)
-    if 'Last-Modified' not in response.header:
-        lm = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(stats.st_mtime))
-        response.header['Last-Modified'] = lm
-    if 'HTTP_IF_MODIFIED_SINCE' in request.environ:
-        ims = request.environ['HTTP_IF_MODIFIED_SINCE']
-        # IE sends "<date>; length=146"
-        ims = ims.split(";")[0].strip()
-        ims = parse_date(ims)
-        if ims is not None and ims >= stats.st_mtime:
-           abort(304, "Not modified")
-    if 'Content-Length' not in response.header:
-        response.header['Content-Length'] = str(stats.st_size)
-    raise BreakTheBottle(open(filename, 'rb'))
-
-
-def parse_date(ims):
-    """
-    Parses date strings usually found in HTTP header and returns UTC epoch.
-    Understands rfc1123, rfc850 and asctime.
-    """
-    try:
-        ts = email.utils.parsedate_tz(ims)
-        if ts is not None:
-            if ts[9] is None:
-                return time.mktime(ts[:8] + (0,)) - time.timezone
-            else:
-                return time.mktime(ts[:8] + (0,)) - ts[9] - time.timezone
-    except (ValueError, IndexError):
-        return None
-
-
-
-
-
-
-# Decorators
-
-def validate(**vkargs):
-    """
-    Validates and manipulates keyword arguments by user defined callables. 
-    Handles ValueError and missing arguments by raising HTTPError(403).
-    """
-    def decorator(func):
-        def wrapper(**kargs):
-            for key, value in vkargs.iteritems():
-                if key not in kargs:
-                    abort(403, 'Missing parameter: %s' % key)
-                try:
-                    kargs[key] = value(kargs[key])
-                except ValueError, e:
-                    abort(403, 'Wrong parameter format for: %s' % key)
-            return func(**kargs)
-        return wrapper
-    return decorator
-
-
-def route(url, **kargs):
-    """
-    Decorator for request handler. Same as add_route(url, handler, **kargs).
-    """
-    return default_app().route(url, **kargs)
-
-def default():
-    """
-    Decorator for request handler. Same as set_default(handler).
-    """
-    return default_app().default()
-
-def error(code=500):
-    """
-    Decorator for error handler. Same as set_error_handler(code, handler).
-    """
-    return default_app().error(code)
-
-
-
-
-
-
-# Server adapter
-
-class WSGIAdapter(object):
-    def run(self, handler): # pragma: no cover
-        pass
-
-    def __repr__(self):
-        return "%s()" % (self.__class__.__name__)
-
-
-class CGIServer(WSGIAdapter):
-    def run(self, handler):
-        from wsgiref.handlers import CGIHandler
-        CGIHandler().run(handler)
-
-
-class ServerAdapter(WSGIAdapter):
-    def __init__(self, host='127.0.0.1', port=8080, **kargs):
-        WSGIAdapter.__init__(self)
-        self.host = host
-        self.port = int(port)
-        self.options = kargs
-
-    def __repr__(self):
-        return "%s (%s:%d)" % (self.__class__.__name__, self.host, self.port)
-
-
-class WSGIRefServer(ServerAdapter):
-    def run(self, handler):
-        from wsgiref.simple_server import make_server
-        srv = make_server(self.host, self.port, handler)
-        srv.serve_forever()
-
-
-class CherryPyServer(ServerAdapter):
-    def run(self, handler):
-        from cherrypy import wsgiserver
-        server = wsgiserver.CherryPyWSGIServer((self.host, self.port), handler)
-        server.start()
-=======
-class FapwsServer(ServerAdapter):
-    """
-    Extremly fast webserver using libev.
-    See http://william-os4y.livejournal.com/
-    Experimental ...
-    """
-    def run(self, handler):
-        import fapws._evwsgi as evwsgi
-        from fapws import base
-        evwsgi.start(self.host, self.port)
-        evwsgi.set_base_module(base)
-        def app(environ, start_response):
-            environ['wsgi.multiprocess'] = False
-            return handler(environ, start_response)
-        evwsgi.wsgi_cb(('',app))
-        evwsgi.run()
-
-
-def run(app=None, server=WSGIRefServer, host='127.0.0.1', port=8080,
-        interval=1, reloader=False, **kargs):
-    """ Runs bottle as a web server. """
-    if not app:
-        app = default_app()
-
-    quiet = bool(kargs.get('quiet', False))
-    print 'simple', app.simple_routes
-    print 'reg', app.regexp_routes
->>>>>>> Stashed changes
 
     # Instantiate server, if it is a class instead of an instance
     if isinstance(server, type):
@@ -1203,38 +689,6 @@ def run(app=None, server=WSGIRefServer, host='127.0.0.1', port=8080,
         elif issubclass(server, ServerAdapter):
             server = server(host=host, port=port, **kargs)
 
-<<<<<<< Updated upstream
-class FlupServer(ServerAdapter):
-    def run(self, handler):
-       from flup.server.fcgi import WSGIServer
-       WSGIServer(handler, bindAddress=(self.host, self.port)).run()
-
-
-class PasteServer(ServerAdapter):
-    def run(self, handler):
-        from paste import httpserver
-        from paste.translogger import TransLogger
-        app = TransLogger(handler)
-        httpserver.serve(app, host=self.host, port=str(self.port))
-
-
-class FapwsServer(ServerAdapter):
-    """
-    Extremly fast webserver using libev.
-    See http://william-os4y.livejournal.com/
-    Experimental ...
-    """
-    def run(self, handler):
-        import fapws._evwsgi as evwsgi
-        from fapws import base
-        evwsgi.start(self.host, self.port)
-        evwsgi.set_base_module(base)
-        def app(environ, start_response):
-            environ['wsgi.multiprocess'] = False
-            return handler(environ, start_response)
-        evwsgi.wsgi_cb(('',app))
-        evwsgi.run()
-=======
     if not isinstance(server, WSGIAdapter):
         raise RuntimeError("Server must be a subclass of WSGIAdapter")
  
@@ -1290,82 +744,10 @@ def reloader_run(server, app, interval):
                     file_path = file_split[0] + '.py'
                     # 以文件路径为 key，文件的最近修改时间wei v 存入 files
                     files[file_path] = os.stat(file_path).st_mtime
->>>>>>> Stashed changes
 
         # 使用 thread module（为什么不用 threading）启动服务器
         thread.start_new_thread(server.run, (app,))
 
-<<<<<<< Updated upstream
-def run(app=None, server=WSGIRefServer, host='127.0.0.1', port=8080,
-        interval=1, reloader=False, **kargs):
-    """ Runs bottle as a web server. """
-    if not app:
-        app = default_app()
-    
-    quiet = bool(kargs.get('quiet', False))
-
-    # Instantiate server, if it is a class instead of an instance
-    if isinstance(server, type):
-        if issubclass(server, CGIServer):
-            server = server()
-        elif issubclass(server, ServerAdapter):
-            server = server(host=host, port=port, **kargs)
-
-    if not isinstance(server, WSGIAdapter):
-        raise RuntimeError("Server must be a subclass of WSGIAdapter")
- 
-    if not quiet and isinstance(server, ServerAdapter): # pragma: no cover
-        if not reloader or os.environ.get('BOTTLE_CHILD') == 'true':
-            print "Bottle server starting up (using %s)..." % repr(server)
-            print "Listening on http://%s:%d/" % (server.host, server.port)
-            print "Use Ctrl-C to quit."
-            print
-        else:
-            print "Bottle auto reloader starting up..."
-
-    try:
-        if reloader and interval:
-            reloader_run(server, app, interval)
-        else:
-            server.run(app)
-    except KeyboardInterrupt:
-        if not quiet: # pragma: no cover
-            print "Shutting Down..."
-
-
-#TODO: If the parent process is killed (with SIGTERM) the childs survive...
-def reloader_run(server, app, interval):
-    if os.environ.get('BOTTLE_CHILD') == 'true':
-        # We are a child process
-        files = dict()
-        for module in sys.modules.values():
-            file_path = getattr(module, '__file__', None)
-            if file_path and os.path.isfile(file_path):
-                file_split = os.path.splitext(file_path)
-                if file_split[1] in ('.py', '.pyc', '.pyo'):
-                    file_path = file_split[0] + '.py'
-                    files[file_path] = os.stat(file_path).st_mtime
-        thread.start_new_thread(server.run, (app,))
-        while True:
-            time.sleep(interval)
-            for file_path, file_mtime in files.iteritems():
-                if not os.path.exists(file_path):
-                    print "File changed: %s (deleted)" % file_path
-                elif os.stat(file_path).st_mtime > file_mtime:
-                    print "File changed: %s (modified)" % file_path
-                else: continue
-                print "Restarting..."
-                app.serve = False
-                time.sleep(interval) # be nice and wait for running requests
-                sys.exit(3)
-    while True:
-        args = [sys.executable] + sys.argv
-        environ = os.environ.copy()
-        environ['BOTTLE_CHILD'] = 'true'
-        exit_status = subprocess.call(args, env=environ)
-        if exit_status != 3:
-            sys.exit(exit_status)
-=======
         while True:
             # interval 默认值 一秒
             time.sleep(interval)
@@ -1400,19 +782,9 @@ def reloader_run(server, app, interval):
         if exit_status != 3:
             sys.exit(exit_status)
 
->>>>>>> Stashed changes
-
-
-
-
-<<<<<<< Updated upstream
 
 # Templates
 
-=======
-# Templates
-
->>>>>>> Stashed changes
 class TemplateError(HTTPError):
     def __init__(self, message):
         HTTPError.__init__(self, 500, message)
@@ -1509,10 +881,7 @@ class Jinja2Template(BaseTemplate):
     def prepare(self):
         if not self.env:
             from jinja2 import Environment, FunctionLoader
-<<<<<<< Updated upstream
-=======
             # 创建 env
->>>>>>> Stashed changes
             self.env = Environment(line_statement_prefix="#", loader=FunctionLoader(self.loader))
         if self.template:
             self.tpl = self.env.from_string(self.template)
@@ -1635,12 +1004,6 @@ def template(tpl, template_adapter=SimpleTemplate, **args):
     lookup = args.get('template_lookup', TEMPLATE_PATH)
     if tpl not in TEMPLATES or DEBUG:
         if "\n" in tpl or "{" in tpl or "%" in tpl or '$' in tpl:
-<<<<<<< Updated upstream
-            TEMPLATES[tpl] = template_adapter(template=tpl, lookup=lookup)
-        elif '.' in tpl:
-            TEMPLATES[tpl] = template_adapter(filename=tpl, lookup=lookup)
-        else:
-=======
             # tpl 是 template string
             TEMPLATES[tpl] = template_adapter(template=tpl, lookup=lookup)
         elif '.' in tpl:
@@ -1648,7 +1011,6 @@ def template(tpl, template_adapter=SimpleTemplate, **args):
             TEMPLATES[tpl] = template_adapter(filename=tpl, lookup=lookup)
         else:
             # tpl 只有 name
->>>>>>> Stashed changes
             TEMPLATES[tpl] = template_adapter(name=tpl, lookup=lookup)
     if not TEMPLATES[tpl]:
         abort(500, 'Template (%s) not found' % tpl)

@@ -104,11 +104,8 @@ except ImportError: # pragma: no cover
     json_dumps = None
 
 
-
-
-
-
 # Exceptions and Events
+
 
 class BottleException(Exception):
     """ A base class for exceptions used by bottle. """
@@ -146,13 +143,11 @@ class BreakTheBottle(BottleException):
         self.output = output
 
 
-
-
-
-
 # WSGI abstraction: Request and response management
 
 _default_app = None
+
+
 def default_app(newapp = None):
     """
     Returns the current default app or sets a new one.
@@ -345,7 +340,6 @@ class Bottle(object):
         status = '%d %s' % (response.status, HTTP_CODES[response.status])
         start_response(status, response.wsgiheaders())
         return output
-
 
 
 class Request(threading.local):
@@ -558,7 +552,9 @@ def parse_date(ims):
             'error_message' : ''.join(self.output)
         }
 
+
 # Decorators
+
 
 def validate(**vkargs):
     """
@@ -585,11 +581,13 @@ def route(url, **kargs):
     """
     return default_app().route(url, **kargs)
 
+
 def default():
     """
     Decorator for request handler. Same as set_default(handler).
     """
     return default_app().default()
+
 
 def error(code=500):
     """
@@ -608,8 +606,8 @@ def error(code=500):
         self.serve = True
 
 
-
 # Server adapter
+
 
 class WSGIAdapter(object):
     def run(self, handler): # pragma: no cover
@@ -788,6 +786,7 @@ def reloader_run(server, app, interval):
 class TemplateError(HTTPError):
     def __init__(self, message):
         HTTPError.__init__(self, 500, message)
+
 
 class BaseTemplate(object):
     def __init__(self, template='', name=None, filename=None, lookup=[]):
@@ -995,7 +994,6 @@ class SimpleTemplate(BaseTemplate):
         return stdout
             
 
-
 def template(tpl, template_adapter=SimpleTemplate, **args):
     '''
     Get a rendered template as a string iterator.
@@ -1024,13 +1022,16 @@ def mako_template(tpl_name, **kargs):
     kargs['template_adapter'] = MakoTemplate
     return template(tpl_name, **kargs)
 
+
 def cheetah_template(tpl_name, **kargs):
     kargs['template_adapter'] = CheetahTemplate
     return template(tpl_name, **kargs)
 
+
 def jinja2_template(tpl_name, **kargs):
     kargs['template_adapter'] = Jinja2Template
     return template(tpl_name, **kargs)
+
 
 def view(tpl_name, **defaults):
     ''' Decorator: Rendes a template for a handler.
@@ -1044,25 +1045,24 @@ def view(tpl_name, **defaults):
         return wrapper
     return decorator
 
+
 def mako_view(tpl_name, **kargs):
     kargs['template_adapter'] = MakoTemplate
     return view(tpl_name, **kargs)
 
+
 def cheetah_view(tpl_name, **kargs):
     kargs['template_adapter'] = CheetahTemplate
     return view(tpl_name, **kargs)
+
 
 def jinja2_view(tpl_name, **kargs):
     kargs['template_adapter'] = Jinja2Template
     return view(tpl_name, **kargs)
 
 
-
-
-
-
-
 # Database
+
 
 class BottleBucket(object): # pragma: no cover
     """ Memory-caching wrapper around anydbm """
@@ -1193,10 +1193,6 @@ class BottleDB(threading.local): # pragma: no cover
         self.open.clear()
 
 
-
-
-
-
 # Modul initialization and configuration
 
 DB_PATH = './'
@@ -1277,9 +1273,11 @@ local = threading.local()
 
 #TODO: Global and app local configuration (debug, defaults, ...) is a mess
 
+
 def debug(mode=True):
     global DEBUG
     DEBUG = bool(mode)
+
 
 def optimize(mode=True):
     default_app().optimize = bool(mode)

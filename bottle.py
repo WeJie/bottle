@@ -186,6 +186,7 @@ class cached_property(object):
 
     def __get__(self, obj, cls):
         if obj is None: return self
+        print 'cached property object', obj, cls
         value = obj.__dict__[self.func.__name__] = self.func(obj)
         return value
 
@@ -419,9 +420,11 @@ class Router(object):
             methods = ['PROXY', verb, 'ANY']
 
         for method in methods:
+            # 查找静态 url
             if method in self.static and path in self.static[method]:
                 target, getargs = self.static[method][path]
                 return target, getargs(path) if getargs else {}
+            # 查找动态 url
             elif method in self.dyna_regexes:
                 for combined, rules in self.dyna_regexes[method]:
                     match = combined(path)
@@ -432,14 +435,19 @@ class Router(object):
         # No matching route found. Collect alternative methods for 405 response
         allowed = set([])
         nocheck = set(methods)
+        # 在其他 method 中检查 path 是否存在
         for method in set(self.static) - nocheck:
             if path in self.static[method]:
                 allowed.add(verb)
+
+        # 在其他 method 中检查 path 是否存在
         for method in set(self.dyna_regexes) - allowed - nocheck:
             for combined, rules in self.dyna_regexes[method]:
                 match = combined(path)
                 if match:
                     allowed.add(method)
+        # 如果 path 存在于其他 method中，但是请求的 method 下没有
+        # 表示该 path 不支持该 method 请求，属于 405 错误
         if allowed:
             allow_header = ",".join(sorted(allowed))
             raise HTTPError(405, "Method not allowed.", Allow=allow_header)
@@ -611,6 +619,7 @@ class Bottle(object):
 
     @cached_property
     def _hooks(self):
+        print 'we get hook name', self.__hook_names
         return dict((name, []) for name in self.__hook_names)
 
     def add_hook(self, name, func):
@@ -637,7 +646,7 @@ class Bottle(object):
 
     def trigger_hook(self, __name, *args, **kwargs):
         ''' Trigger a hook and return a list of results. '''
-        return [hook(*args, **kwargs) for hook in self._hooks[__name][:]]
+        return [hook(*args, **kwargs) for hook in self._hooks[__name]]
 
     def hook(self, name):
         """ Return a decorator that attaches a callback to a hook. See
@@ -854,13 +863,16 @@ class Bottle(object):
             request.bind(environ)
             response.bind()
             try:
+                # 加入了 before_request hook
                 self.trigger_hook('before_request')
+
                 route, args = self.router.match(environ)
                 environ['route.handle'] = route
                 environ['bottle.route'] = route
                 environ['route.url_args'] = args
                 return route.call(**args)
             finally:
+                # 加入了 after_request hook
                 self.trigger_hook('after_request')
 
         except HTTPResponse:
@@ -966,11 +978,15 @@ class Bottle(object):
             err = '<h1>Critical error while processing request: %s</h1>' \
                   % html_escape(environ.get('PATH_INFO', '/'))
             if DEBUG:
+                # 启用了 debug 则添加 traceback 信息
+                # 这里还使用了 html_escape 对 traceback 信息进行过滤
                 err += '<h2>Error:</h2>\n<pre>\n%s\n</pre>\n' \
                        '<h2>Traceback:</h2>\n<pre>\n%s\n</pre>\n' \
                        % (html_escape(repr(_e())), html_escape(format_exc()))
+            # 将错误信息输出到 stderr
             environ['wsgi.errors'].write(err)
             headers = [('Content-Type', 'text/html; charset=UTF-8')]
+            # start_response 通常只接收两个参数，status_code、headers，sys.exc_info 是可选参数，传递异常信息
             start_response('500 INTERNAL SERVER ERROR', headers, sys.exc_info())
             return [tob(err)]
 
@@ -3036,7 +3052,9 @@ def load_app(target):
     """ Load a bottle application from a module and make sure that the import
         does not affect the current default application, but returns a separate
         application object. See :func:`load` for the target parameter. """
-    global NORUN; NORUN, nr_old = True, NORUN
+    global NORUN
+    NORUN, nr_old = True, NORUN
+
     try:
         tmp = default_app.push() # Create a new "default application"
         rv = load(target) # Import the target module
@@ -3065,23 +3083,42 @@ def run(app=None, server='wsgiref', host='127.0.0.1', port=8080,
         :param quiet: Suppress output to stdout and stderr? (default: False)
         :param options: Options passed to the server adapter.
      """
+    # 这里使用 NORUN 是什么意思
     if NORUN: return
+
+    # 需要自动重启，且还没有创建子进程
     if reloader and not os.environ.get('BOTTLE_CHILD'):
         try:
+
             lockfile = None
+            # 创建临时文件
             fd, lockfile = tempfile.mkstemp(prefix='bottle.', suffix='.lock')
-            os.close(fd) # We only need this file to exist. We never write to it
+            os.close(fd) # We only need this file to exist. We never write to it, 为什么？
+
             while os.path.exists(lockfile):
+                # 获取 Python bin 路径和 server 启动参数
                 args = [sys.executable] + sys.argv
+                # 获取系统环境变量
                 environ = os.environ.copy()
+                # child 为 ture 已创建子进程（在下面创建）
                 environ['BOTTLE_CHILD'] = 'true'
                 environ['BOTTLE_LOCKFILE'] = lockfile
+
+                # 使用子进程，启动服务器 -- python bottle_app.py
                 p = subprocess.Popen(args, env=environ)
+
+                # 检查 子进程是否运行中
                 while p.poll() is None: # Busy wait...
+                    # 修改 lockfile 的 access 和 modify 时间
                     os.utime(lockfile, None) # I am alive!
                     time.sleep(interval)
+
+                # 子进程挂了，返回值是 3，重启服务器；不是 3，退出 Python 进程
                 if p.poll() != 3:
-                    if os.path.exists(lockfile): os.unlink(lockfile)
+                    if os.path.exists(lockfile):
+                        # 删除 lockfile 退出循环
+                        os.unlink(lockfile)
+                    # 退出 Python 进程
                     sys.exit(p.poll())
         except KeyboardInterrupt:
             pass
@@ -3090,28 +3127,43 @@ def run(app=None, server='wsgiref', host='127.0.0.1', port=8080,
                 os.unlink(lockfile)
         return
 
+    # 如果支持自动重启，跑到这里就已经进入子进程
     try:
+        # 设置 debug
         if debug is not None: _debug(debug)
+
         app = app or default_app()
+
+        # app 是 string
         if isinstance(app, basestring):
             app = load_app(app)
+
         if not callable(app):
             raise ValueError("Application is not callable: %r" % app)
 
+        # 将所有插件放入 app 的插件列表
         for plugin in plugins or []:
             app.install(plugin)
 
+        # 获取 Server 对象
         if server in server_names:
             server = server_names.get(server)
+
+        # Server 对象是一个字符串？
         if isinstance(server, basestring):
             server = load(server)
+
+        #初始化 Server
         if isinstance(server, type):
             server = server(host=host, port=port, **kargs)
+
         if not isinstance(server, ServerAdapter):
             raise ValueError("Unknown or unsupported server: %r" % server)
 
+        # 是否要 静默启动
         server.quiet = server.quiet or quiet
         if not server.quiet:
+            # 为什么不用 stdout
             _stderr("Bottle v%s server starting up (using %s)...\n" % (__version__, repr(server)))
             _stderr("Listening on http://%s:%d/\n" % (server.host, server.port))
             _stderr("Hit Ctrl-C to quit.\n\n")
@@ -3119,6 +3171,7 @@ def run(app=None, server='wsgiref', host='127.0.0.1', port=8080,
         if reloader:
             lockfile = os.environ.get('BOTTLE_LOCKFILE')
             bgcheck = FileCheckerThread(lockfile, interval)
+            # 在检查线程下跑 Server
             with bgcheck:
                 server.run(app)
             if bgcheck.status == 'reload':
@@ -3137,7 +3190,6 @@ def run(app=None, server='wsgiref', host='127.0.0.1', port=8080,
         sys.exit(3)
 
 
-
 class FileCheckerThread(threading.Thread):
     ''' Interrupt main-thread as soon as a changed module file is detected,
         the lockfile gets deleted or gets to old. '''
@@ -3150,20 +3202,28 @@ class FileCheckerThread(threading.Thread):
 
     def run(self):
         exists = os.path.exists
+        # 获取 文件的最近修改时间
         mtime = lambda path: os.stat(path).st_mtime
         files = dict()
 
+        # 构造当前目录下所有文件的路径和最近修改时间的字典
         for module in list(sys.modules.values()):
             path = getattr(module, '__file__', '')
-            if path[-4:] in ('.pyo', '.pyc'): path = path[:-1]
-            if path and exists(path): files[path] = mtime(path)
+            if path[-4:] in ('.pyo', '.pyc'):
+                path = path[:-1]
+            if path and exists(path):
+                files[path] = mtime(path)
 
         while not self.status:
+            # lockfile 不存在，或者 最近修改时间小于 6 毫秒前
             if not exists(self.lockfile)\
             or mtime(self.lockfile) < time.time() - self.interval - 5:
                 self.status = 'error'
+                # 抛出异常
                 thread.interrupt_main()
+
             for path, lmtime in list(files.items()):
+                # 发现有文件被删除或者修改
                 if not exists(path) or mtime(path) > lmtime:
                     self.status = 'reload'
                     thread.interrupt_main()
@@ -3171,10 +3231,14 @@ class FileCheckerThread(threading.Thread):
             time.sleep(self.interval)
 
     def __enter__(self):
+        # 进入 with statement, 启动线程
         self.start()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if not self.status: self.status = 'exit' # silent exit
+        if not self.status:
+            # silent exit
+            self.status = 'exit'
+        # 等待线程退出
         self.join()
         return exc_type is not None and issubclass(exc_type, KeyboardInterrupt)
 
